@@ -108,7 +108,7 @@ jobs:
           $projects | ForEach-Object {
             $thisProject = $_
             if ($thisProject -and ($thisProject -ne '.')) {
-              $project = $thisProject.Replace('\','_')
+              $project = $thisProject.Replace('\','_').Replace('/','_')
             }
             else {
               $project = $env:repoName
@@ -192,7 +192,7 @@ jobs:
             core.setOutput('releaseId', releaseId);
 
   UploadArtifacts:
-    runs-on: [ windows-latest ] 
+    runs-on: [ windows-latest ]
     needs: [ CreateRelease ]
     strategy:
       matrix: ${{ fromJson(needs.CreateRelease.outputs.artifacts) }}
