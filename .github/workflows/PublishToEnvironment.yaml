@@ -19,6 +19,10 @@ defaults:
   run:
     shell: powershell
 
+env:
+  ALGoOrgSettings: ${{ vars.ALGoOrgSettings }}
+  ALGoRepoSettings: ${{ vars.ALGoRepoSettings }}
+
 jobs:
   Initialization:
     runs-on: [ windows-latest ]
@@ -81,67 +85,40 @@ jobs:
           settingsJson: ${{ env.Settings }}
           secrets: '${{ steps.envName.outputs.envName }}-AuthContext,${{ steps.envName.outputs.envName }}_AuthContext,AuthContext,${{ steps.envName.outputs.envName }}-EnvironmentName,${{ steps.envName.outputs.envName }}_EnvironmentName,EnvironmentName,projects'
 
-      - name: AuthContext
-        id: authContext
-        run: |
-          $ErrorActionPreference = "STOP"
-          Set-StrictMode -version 2.0
-          $envName = '${{ steps.envName.outputs.envName }}'
-          $authContext = $null
-          "$($envName)-AuthContext", "$($envName)_AuthContext", "AuthContext" | ForEach-Object {
-            if (!($authContext)) {
-              $authContext = [System.Environment]::GetEnvironmentVariable($_)
-              if ($authContext) {
-                Write-Host "Using $_ secret"
-              }
-            }            
-          }
-          if (!($authContext)) {
-            Write-Host "::Error::No AuthContext provided"
-            exit 1
-          }
-          $environmentName = $null
-          "$($envName)-EnvironmentName", "$($envName)_EnvironmentName", "EnvironmentName" | ForEach-Object {
-            if (!($EnvironmentName)) {
-              $EnvironmentName = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String([System.Environment]::GetEnvironmentVariable($_)))
-              if ($EnvironmentName) {
-                Write-Host "Using $_ secret"
-              }
-            }            
-          }
-          if (!($environmentName)) {
-            $environmentName = '${{ steps.envName.outputs.envName }}'
-          }
-          $environmentName = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($environmentName + '${{ matrix.environment }}'.SubString($envName.Length)).ToUpperInvariant()))
+      - name: Get Auth context
+        uses: BusinessCentralDemos/AL-Go-Actions/ReadAuthContext@main
+        with: 
+          shell: powershell
+          envName: ${{ steps.envName.outputs.envName }}
+          environment: ${{ steps.envName.outputs.envName }}
 
-          $projects = [System.Environment]::GetEnvironmentVariable("$($envName)-projects")
-          if (-not $projects) {
-            $projects = [System.Environment]::GetEnvironmentVariable("$($envName)_Projects")
-            if (-not $projects) {
-              $projects = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String([System.Environment]::GetEnvironmentVariable('projects')))
-            }
-          }
-          if ($projects -eq '') {
-            $projects = '*'
-          }
+      - name: Get Artifacts
+        uses: BusinessCentralDemos/AL-Go-Actions/GetArtifacts@main
+        with:
+          shell: powershell
+          parentTelemetryScopeJson: ${{ needs.Initialization.outputs.telemetryScopeJson }}
+          artifactVersion: ${{ github.event.inputs.appVersion }}
 
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "authContext=$authContext"
-          Write-Host "authContext=$authContext"
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "environmentName=$environmentName"
-          Write-Host "environmentName=$environmentName"
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "projects=$projects"
-          Write-Host "projects=$projects"
+      - name: Deploy PowerPlatform
+        if: ${{ env.deployPP == 'true' }}
+        uses: BusinessCentralDemos/AL-Go-Actions/DeployPowerPlatform@main
+        with:
+          shell: powershell
+          parentTelemetryScopeJson: ${{ needs.Initialization.outputs.telemetryScopeJson }}
+          artifactPath: '.artifacts'
+          deploySettings: ${{ env.deployTo }} 
+          authSettings: ${{ env.authContext }}
 
-      - name: Deploy
+      - name: Deploy AL
         uses: BusinessCentralDemos/AL-Go-Actions/Deploy@main
         env:
-          AuthContext: ${{ steps.authContext.outputs.authContext }}
+          AuthContext: ${{ env.authContext }}
         with:
           shell: powershell
           parentTelemetryScopeJson: ${{ needs.Initialization.outputs.telemetryScopeJson }}
           type: 'Publish'
-          projects: ${{ steps.authContext.outputs.projects }}
-          environmentName: ${{ steps.authContext.outputs.environmentName }}
+          projects: ${{ env.projects }}
+          environmentName: ${{ env.environmentName }}
           artifacts: ${{ github.event.inputs.appVersion }}
 
   PostProcess:

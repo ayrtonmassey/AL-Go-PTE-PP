@@ -29,7 +29,8 @@ $webClient.DownloadFile('https://raw.githubusercontent.com/BusinessCentralDemos/
 Import-Module $GitHubHelperPath
 . $ALGoHelperPath -local
 
-$baseFolder = Join-Path $PSScriptRoot ".." -Resolve
+$baseFolder = GetBaseFolder -folder $PSScriptRoot
+$project = GetProject -baseFolder $baseFolder -projectALGoFolder $PSScriptRoot
 
 Clear-Host
 Write-Host
@@ -54,7 +55,7 @@ The script will also modify launch.json to have a Local Sandbox configuration po
 
 '@
 
-$settings = ReadSettings -baseFolder $baseFolder -userName $env:USERNAME
+$settings = ReadSettings -baseFolder $baseFolder -project $project -userName $env:USERNAME
 
 Write-Host "Checking System Requirements"
 $dockerProcess = (Get-Process "dockerd" -ErrorAction Ignore)
@@ -73,7 +74,8 @@ if (-not $containerName) {
     $containerName = Enter-Value `
         -title "Container name" `
         -question "Please enter the name of the container to create" `
-        -default "bcserver"
+        -default "bcserver" `
+        -trimCharacters @('"',"'",' ')
 }
 
 if (-not $auth) {
@@ -113,7 +115,8 @@ if (-not $licenseFileUrl) {
         -description $description `
         -question "Local path or a secure download URL to license file " `
         -default $default `
-        -doNotConvertToLower
+        -doNotConvertToLower `
+        -trimCharacters @('"',"'",' ')
 
     if ($licenseFileUrl -eq "none") {
         $licenseFileUrl = ""
@@ -125,6 +128,7 @@ CreateDevEnv `
     -caller local `
     -containerName $containerName `
     -baseFolder $baseFolder `
+    -project $project `
     -auth $auth `
     -credential $credential `
     -licenseFileUrl $licenseFileUrl `
