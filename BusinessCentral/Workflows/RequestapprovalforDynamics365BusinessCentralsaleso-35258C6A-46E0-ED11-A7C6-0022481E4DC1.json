@@ -1,0 +1,356 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_dynamicssmbsaas": {
+        "runtimeSource": "embedded",
+        "connection": {},
+        "api": {
+          "name": "shared_dynamicssmbsaas"
+        }
+      },
+      "shared_approvals": {
+        "runtimeSource": "embedded",
+        "connection": {},
+        "api": {
+          "name": "shared_approvals"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {},
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "When_a_sales_document_approval_is_requested_(V3)": {
+          "metadata": {
+            "operationMetadataId": "e21a4008-4f4f-47e9-ae27-890d70433bc6"
+          },
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_dynamicssmbsaas",
+              "connectionName": "shared_dynamicssmbsaas",
+              "operationId": "CreateSalesDocumentApprovalWebHookV3"
+            },
+            "parameters": {
+              "bcenvironment": "COPILOT",
+              "company": "726a0ad6-0dc2-ed11-a385-000d3a269ff8",
+              "subscription/HeaderFirstConditionField": "documentType",
+              "subscription/HeaderFirstConditionFieldValue": "Order",
+              "subscription/HeaderSecondConditionField": "status",
+              "subscription/HeaderSecondConditionFieldValue": "Open",
+              "subscription/HeaderThirdConditionField": "amountIncludingVAT",
+              "subscription/HeaderThirdConditionFieldValue": ">0"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Get_document": {
+          "runAfter": {},
+          "metadata": {
+            "operationMetadataId": "1ea33b03-1503-4238-a90b-e5e95486f604"
+          },
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_dynamicssmbsaas",
+              "connectionName": "shared_dynamicssmbsaas",
+              "operationId": "GetItemV3"
+            },
+            "parameters": {
+              "bcenvironment": "@triggerOutputs()?['body/Environment Name']",
+              "company": "@triggerOutputs()?['body/Company Id']",
+              "dataset": "workflowEndpoints",
+              "table": "workflowSalesDocuments",
+              "id": "@triggerOutputs()?['body/Row Id']"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Format_total_amount": {
+          "runAfter": {
+            "Get_document": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "8b9e3b13-a579-46f5-a227-905a5d55acf4"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Amount",
+                "type": "string",
+                "value": "@{concat(formatNumber(float(outputs('Get_document')?['body/amountIncludingVAT']), '#,##0.00 '), outputs('Get_document')?['body/currencyCode'])}"
+              }
+            ]
+          }
+        },
+        "Start_and_wait_for_an_approval": {
+          "runAfter": {
+            "Format_total_amount": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "96c731c1-47c7-46a3-b168-47c7f0f52eb2"
+          },
+          "type": "OpenApiConnectionWebhook",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals",
+              "connectionName": "shared_approvals",
+              "operationId": "StartAndWaitForAnApproval"
+            },
+            "parameters": {
+              "approvalType": "BasicAwaitAll",
+              "WebhookApprovalCreationInput/title": "Request approval for Microsoft Dynamics 365 Business Central sales order",
+              "WebhookApprovalCreationInput/assignedTo": "alans@CRMbc047068.OnMicrosoft.com; gregw@CRMbc047068.OnMicrosoft.com;",
+              "WebhookApprovalCreationInput/details": "Sales order @{body('Get_document')?['number']} totaling @{variables('Amount')} for @{body('Get_document')?['sellToCustomerName']} needs to be approved.",
+              "WebhookApprovalCreationInput/enableNotifications": true,
+              "WebhookApprovalCreationInput/enableReassignment": true
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        },
+        "Initialize_response_summary": {
+          "runAfter": {
+            "Start_and_wait_for_an_approval": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "fd8fe4d3-d6e2-4fd6-9b63-1633b0ef7447"
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Response Summary",
+                "type": "string",
+                "value": "<table>\n<thead>\n<tr>\n<th style=\"min-width:10em;text-align:left\">Approver</th>\n<th style=\"min-width:6em;text-align:left\">Response</th>\n<th style=\"min-width:10em;text-align:left\">Comments</th>\n</tr>\n</thead>\n<tbody>\n"
+              }
+            ]
+          }
+        },
+        "Apply_to_each": {
+          "foreach": "@outputs('Start_and_wait_for_an_approval')?['body/responses']",
+          "actions": {
+            "Format_response_summary": {
+              "runAfter": {},
+              "metadata": {
+                "operationMetadataId": "81687390-7569-4082-b105-8bde495fcbc7"
+              },
+              "type": "AppendToStringVariable",
+              "inputs": {
+                "name": "Response Summary",
+                "value": "<tr>\n<td>@{items('Apply_to_each')?['responder/displayName']}</td>\n<td>@{items('Apply_to_each')?['approverResponse']}</td>\n<td>@{items('Apply_to_each')?['comments']}</td>\n</tr>\n"
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_response_summary": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "8a84481c-b5cd-454d-8033-077fc9191adc"
+          },
+          "type": "Foreach"
+        },
+        "Finalize_response_summary": {
+          "runAfter": {
+            "Apply_to_each": [
+              "Succeeded"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "688a7f6b-cd8c-4da4-814b-2655331d75e6"
+          },
+          "type": "AppendToStringVariable",
+          "inputs": {
+            "name": "Response Summary",
+            "value": "</tbody>\n</table>\n"
+          }
+        },
+        "Condition": {
+          "actions": {
+            "Approve_document": {
+              "runAfter": {},
+              "metadata": {
+                "operationMetadataId": "a551b0d0-5ca7-4cfa-aa5b-260c5ce3bf7e"
+              },
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_dynamicssmbsaas",
+                  "connectionName": "shared_dynamicssmbsaas",
+                  "operationId": "ExecuteProcedureV3"
+                },
+                "parameters": {
+                  "bcenvironment": "@triggerOutputs()?['body/Environment Name']",
+                  "company": "@triggerOutputs()?['body/Company Id']",
+                  "dataset": "workflowEndpoints",
+                  "procedure": "WorkflowActionResponse_Approve",
+                  "parameters": {
+                    "workflowStepInstanceId": "@triggerOutputs()?['body/Workflow Step Id']"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              }
+            },
+            "Condition_3": {
+              "actions": {
+                "Send_approval_confirmation": {
+                  "runAfter": {},
+                  "metadata": {
+                    "operationMetadataId": "8877ac6f-04be-422e-93df-9c4ac7a66574"
+                  },
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@triggerOutputs()?['body/Requested By User Email']",
+                      "emailMessage/Subject": "Sales order @{body('Get_document')?['number']} approved",
+                      "emailMessage/Body": "Approval request for sales order @{body('Get_document')?['number']} totaling @{variables('Amount')} for @{body('Get_document')?['sellToCustomerName']} was approved.<br/>\n<br/>\n@{variables('Response Summary')}",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  }
+                }
+              },
+              "runAfter": {
+                "Approve_document": [
+                  "Succeeded"
+                ]
+              },
+              "expression": {
+                "not": {
+                  "equals": [
+                    "@triggerOutputs()?['body/Requested By User Email']",
+                    ""
+                  ]
+                }
+              },
+              "metadata": {
+                "operationMetadataId": "9a0b4bf7-18bf-45c9-81cc-94113f03c701"
+              },
+              "type": "If"
+            }
+          },
+          "runAfter": {
+            "Finalize_response_summary": [
+              "Succeeded"
+            ]
+          },
+          "else": {
+            "actions": {
+              "Reject_document": {
+                "runAfter": {},
+                "metadata": {
+                  "operationMetadataId": "9e0a016c-2351-4b24-b1f8-0f4d10ad4a05"
+                },
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_dynamicssmbsaas",
+                    "connectionName": "shared_dynamicssmbsaas",
+                    "operationId": "ExecuteProcedureV3"
+                  },
+                  "parameters": {
+                    "bcenvironment": "@triggerOutputs()?['body/Environment Name']",
+                    "company": "@triggerOutputs()?['body/Company Id']",
+                    "dataset": "workflowEndpoints",
+                    "procedure": "WorkflowActionResponse_Reject",
+                    "parameters": {
+                      "workflowStepInstanceId": "@triggerOutputs()?['body/Workflow Step Id']"
+                    }
+                  },
+                  "authentication": "@parameters('$authentication')"
+                }
+              },
+              "Condition_2": {
+                "actions": {
+                  "Send_rejection_confirmation": {
+                    "runAfter": {},
+                    "metadata": {
+                      "operationMetadataId": "a36d5505-ceb7-491c-8a1d-ab73df298f69"
+                    },
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "@triggerOutputs()?['body/Requested By User Email']",
+                        "emailMessage/Subject": "Sales order @{body('Get_document')?['number']} rejected",
+                        "emailMessage/Body": "Approval request for sales order @{body('Get_document')?['number']} totaling @{variables('Amount')} for @{body('Get_document')?['sellToCustomerName']} was rejected.<br/>\n<br/>\n@{variables('Response Summary')}",
+                        "emailMessage/Importance": "Normal"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Reject_document": [
+                    "Succeeded"
+                  ]
+                },
+                "expression": {
+                  "not": {
+                    "equals": [
+                      "@triggerOutputs()?['body/Requested By User Email']",
+                      ""
+                    ]
+                  }
+                },
+                "metadata": {
+                  "operationMetadataId": "0459528b-e148-4e03-a519-46152ef4c523"
+                },
+                "type": "If"
+              }
+            }
+          },
+          "expression": {
+            "equals": [
+              "@outputs('Start_and_wait_for_an_approval')?['body/outcome']",
+              "Approve"
+            ]
+          },
+          "metadata": {
+            "operationMetadataId": "ed65f60d-903c-4429-ab35-a84920317deb"
+          },
+          "type": "If"
+        }
+      },
+      "outputs": {}
+    },
+    "templateName": "f350186145be45c0925dcd2832c816f1"
+  },
+  "schemaVersion": "1.0.0.0"
+}
