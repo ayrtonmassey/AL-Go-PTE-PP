@@ -2,7 +2,7 @@
   "type": "PTE",
   "templateUrl": "https://github.com/BusinessCentralDemos/AL-Go-PTE@main",
   "DeployToPP": {
-    "environmentName": "Contoso",
+    "environmentName": "Copilot",
     "companyId": "726a0ad6-0dc2-ed11-a385-000d3a269ff8",
     "ppEnvironmentUrl": "https://orgea0a29f1.crm.dynamics.com"
   },
