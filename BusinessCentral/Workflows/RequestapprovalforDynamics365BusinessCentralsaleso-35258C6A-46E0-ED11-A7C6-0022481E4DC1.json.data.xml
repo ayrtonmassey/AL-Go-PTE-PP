@@ -21,7 +21,7 @@
   <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
   <PrimaryEntity>none</PrimaryEntity>
   <LocalizedNames>
-    <LocalizedName languagecode="1033" description="Request approval for Dynamics 365 Business Central sales order" />
+    <LocalizedName languagecode="1033" description="If this doesn't update then Anders owes me a beer" />
   </LocalizedNames>
   <Descriptions>
     <Description languagecode="1033" description="When a sales order is created in Microsoft Dynamics 365 Business Central, send an approval request. On approval, allows additional actions to be taken on that sales document." />
